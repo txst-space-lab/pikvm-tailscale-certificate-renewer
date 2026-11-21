@@ -2,6 +2,7 @@ package tailscale
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,10 @@ func GetDomain(ctx context.Context) (string, error) {
 	statusResp, err := client.Status(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get status: %w", err)
+	}
+
+	if statusResp.Self == nil {
+		return "", errors.New("tailscale status has no self")
 	}
 
 	return strings.TrimSuffix(statusResp.Self.DNSName, "."), nil

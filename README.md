@@ -46,12 +46,15 @@ journalctl -u pikvm-tailscale-certificate-renewer
 
 The certificate renewer primarily operates in an idle state but actively watches for the following scenarios:
 - Tailscale domain changes
-- Certificate mismatchs between Tailscale and filesystem caused by
-    - Certificate revocation
-    - Certificate expiry
-    - Missing certificate files
-    - Modified certificate files
+- Certificates that are missing, unreadable, expired, or within 30 days of expiry
+- Certificate and key files that do not match each other
+- Certificates whose domain does not match the current Tailscale domain
 - NGINX configuration changes
+
+The renewer checks once an hour. While the local certificate is valid for more
+than 30 days it does not ask tailscaled for a new one, so a slow or rate-limited
+certificate request cannot block the check. The systemd watchdog is fed from a
+separate goroutine, so a long certificate request does not restart the service.
 
 ## 📋 Example Log
 Here's an example log output when a Tailscale domain change occurs:
