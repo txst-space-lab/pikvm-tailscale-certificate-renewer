@@ -18,7 +18,7 @@ import (
 const (
 	checkInterval   = 1 * time.Hour
 	retryInterval   = 1 * time.Hour
-	workTimeout     = 5 * time.Minute
+	workTimeout     = 15 * time.Minute
 	watchdogDivisor = 3
 )
 
