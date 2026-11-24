@@ -11,6 +11,7 @@ import (
 	systemd "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/texas-state-space-lab/pikvm-tailscale-certificate-renewer/internal/certmanager"
 	"github.com/texas-state-space-lab/pikvm-tailscale-certificate-renewer/internal/pikvm"
+	"github.com/texas-state-space-lab/pikvm-tailscale-certificate-renewer/internal/retry"
 	"github.com/texas-state-space-lab/pikvm-tailscale-certificate-renewer/internal/sslpaths"
 	"github.com/texas-state-space-lab/pikvm-tailscale-certificate-renewer/internal/tailscale"
 )
@@ -34,13 +35,20 @@ func main() {
 
 	startWatchdog(ctx)
 
+	retryDelay := retryInterval
+
 	for {
 		if err := renewOnce(ctx); err != nil {
-			slog.Error("failed to check or renew cert", "time_until_retry", retryInterval, "error", err)
-			time.Sleep(retryInterval)
+			wait := retry.Next(err, retryDelay)
+			slog.Error("failed to check or renew cert", "time_until_retry", wait, "error", err)
+			time.Sleep(wait)
+
+			retryDelay = retry.Double(retryDelay)
 
 			continue
 		}
+
+		retryDelay = retryInterval
 
 		time.Sleep(checkInterval)
 	}

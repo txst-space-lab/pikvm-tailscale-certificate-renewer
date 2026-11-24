@@ -28,9 +28,10 @@ func NewCertManager(ssl *sslpaths.SSLPaths) *CertManager {
 }
 
 const (
-	certDirPerms  = 0o755
-	certFilePerms = 0o644
-	renewalWindow = 30 * 24 * time.Hour
+	certDirPerms     = 0o755
+	certFilePerms    = 0o644
+	certFetchTimeout = 5 * time.Minute
+	renewalWindow    = 30 * 24 * time.Hour
 )
 
 var (
@@ -110,16 +111,14 @@ func parseCert(certPEM []byte) (*x509.Certificate, error) {
 }
 
 // GenerateCert asks tailscaled for a new cert pair and writes it to disk.
+//
+// The filesystem is switched to read/write before the request, not after it.
+// tailscaled caches the cert and key under its state directory
+// (/var/lib/tailscale/certs) while it fetches them, and PiKVM OS keeps the root
+// filesystem read-only. Requesting first fails with "read-only file system"
+// after Let's Encrypt has already issued the certificate, so the issuance is
+// discarded and the next attempt asks for another one.
 func (c *CertManager) GenerateCert(ctx context.Context) error {
-	cert, key, err := tailscale.CertPair(ctx, c.ssl.GetDomain())
-	if err != nil {
-		return fmt.Errorf("failed to get tailscale cert pair: %w", err)
-	}
-
-	if err := validateCertPair(cert, key, c.ssl.GetDomain()); err != nil {
-		return err
-	}
-
 	if err := pikvm.SetFSReadWrite(); err != nil {
 		return fmt.Errorf("failed filesystem mode change: %w", err)
 	}
@@ -129,6 +128,18 @@ func (c *CertManager) GenerateCert(ctx context.Context) error {
 			slog.Error("failed filesystem mode change", "error", err)
 		}
 	}()
+
+	fetchCtx, cancel := context.WithTimeout(ctx, certFetchTimeout)
+	defer cancel()
+
+	cert, key, err := tailscale.CertPair(fetchCtx, c.ssl.GetDomain())
+	if err != nil {
+		return fmt.Errorf("failed to get tailscale cert pair: %w", err)
+	}
+
+	if err := validateCertPair(cert, key, c.ssl.GetDomain()); err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(c.ssl.GetDir(), certDirPerms); err != nil {
 		return fmt.Errorf("failed to create cert path: %w", err)

@@ -6,6 +6,9 @@ After=tailscaled.service
 [Service]
 Type=notify
 ExecStart=/usr/local/bin/pikvm-tailscale-certificate-renewer
+# The renewer remounts the root filesystem read/write while it fetches a cert.
+# Reseal it even when the process is killed before its own cleanup runs.
+ExecStopPost=/usr/bin/ro
 Restart=always
 RestartSec=3
 TimeoutSec=5
